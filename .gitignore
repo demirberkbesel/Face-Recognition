@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Veritabanı
+*.db
+*.sqlite3
+
+# InsightFace model dosyaları (çok büyük, repoya girmemeli)
+models/
+*.onnx
+~/.insightface/
+
+# Test fotoğrafları / veri
+data/
+uploads/
+*.jpg
+*.jpeg
+*.png
+
+# Ortam değişkenleri (varsa)
+.env

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector:v0.5.1
+    container_name: face_recognition_db
+    environment:
+      POSTGRES_DB: face_db
+      POSTGRES_USER: face_user
+      POSTGRES_PASSWORD: face_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U face_user -d face_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: face_recognition_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://face_user:face_password@db:5432/face_db
+      - SIMILARITY_THRESHOLD=0.45
+      - INSIGHTFACE_MODEL_NAME=buffalo_l
+      - PORT=8000
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
