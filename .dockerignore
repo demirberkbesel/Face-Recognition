@@ -1,0 +1,13 @@
+# .dockerignore
+# Bu dosyadaki dosyalar/imajlar Docker build context'ine gönderilmez,
+# böylece build daha hızlı olur ve image daha küçük kalır.
+
+.git
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+env
+*.md
+.gitignore
+models/          # modeller build sirasinda container icinde indirilecek

@@ -1,38 +1,57 @@
-version: '3.8'
+# =============================================================================
+#  Face Recognition API – docker-compose.yml
+#  Kullanimi: docker compose up --build
+#  - PostgreSQL + pgvector  (veritabani)
+#  - FastAPI + InsightFace   (api)
+# =============================================================================
 
 services:
+
+  # ---------- PostgreSQL + pgvector ----------
   db:
-    image: ankane/pgvector:v0.5.1
+    image: pgvector/pgvector:pg16
     container_name: face_recognition_db
+    restart: unless-stopped
+
+    # Baglanti bilgileri env ile disaridan verilebilir
     environment:
-      POSTGRES_DB: face_db
-      POSTGRES_USER: face_user
-      POSTGRES_PASSWORD: face_password
+      POSTGRES_DB:     ${POSTGRES_DB:-face_db}
+      POSTGRES_USER:   ${POSTGRES_USER:-face_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-face_password}
+
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
+
+    # Veri kaybolmasin diye volume tanimi
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+    # API container'i db hazir olmadan baslamasin
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U face_user -d face_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-face_user} -d ${POSTGRES_DB:-face_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # ---------- FastAPI + InsightFace ----------
   api:
     build: .
     container_name: face_recognition_api
+    restart: unless-stopped
+
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
+
+    # Tum ayarlar env degiskenlerinden gelir
     environment:
-      - DATABASE_URL=postgresql://face_user:face_password@db:5432/face_db
-      - SIMILARITY_THRESHOLD=0.45
-      - INSIGHTFACE_MODEL_NAME=buffalo_l
-      - PORT=8000
+      DATABASE_URL:        ${DATABASE_URL:-postgresql://face_user:face_password@db:5432/face_db}
+      SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.45}
+      INSIGHTFACE_MODEL_NAME: ${INSIGHTFACE_MODEL_NAME:-buffalo_l}
+      PORT:                ${API_PORT:-8000}
+
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
 
 volumes:
   postgres_data:

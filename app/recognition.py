@@ -142,14 +142,15 @@ def enroll_existing_face(face_id: uuid.UUID, name: str, metadata: Optional[dict]
 
 def _find_nearest_match(embedding: np.ndarray, db: Session) -> Optional[dict]:
     embedding_list = embedding.tolist()
+    emb_str = "[" + ",".join(str(x) for x in embedding_list) + "]"
     result = db.execute(
         text("""
-            SELECT identity_id, (embedding <=> :emb) as distance
+            SELECT identity_id, (embedding <=> CAST(:emb AS vector)) as distance
             FROM face_embeddings
             ORDER BY distance ASC
             LIMIT 1
         """),
-        {"emb": embedding_list},
+        {"emb": emb_str},
     ).fetchone()
 
     if result:
