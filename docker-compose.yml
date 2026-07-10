@@ -53,5 +53,10 @@ services:
       db:
         condition: service_healthy
 
+    # Kırpılmış yüz fotoğrafları container yeniden başlayınca kaybolmasın
+    volumes:
+      - images_data:/app/images
+
 volumes:
   postgres_data:
+  images_data:

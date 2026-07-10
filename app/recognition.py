@@ -1,8 +1,10 @@
 import uuid
+import os
 import logging
 from datetime import datetime
 from typing import Optional
 
+import cv2
 import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -15,6 +17,24 @@ from app.face_engine import FaceEngine
 logger = logging.getLogger(__name__)
 
 engine = FaceEngine()
+
+
+IMAGES_DIR = "images"
+
+
+def _save_cropped_face(image: np.ndarray, bbox: dict, identity_id: uuid.UUID) -> str:
+    identity_dir = os.path.join(IMAGES_DIR, str(identity_id))
+    os.makedirs(identity_dir, exist_ok=True)
+
+    filename = f"{uuid.uuid4()}.jpg"
+    filepath = os.path.join(identity_dir, filename)
+
+    ymin, ymax = max(0, bbox["ymin"]), bbox["ymax"]
+    xmin, xmax = max(0, bbox["xmin"]), bbox["xmax"]
+    cropped = image[ymin:ymax, xmin:xmax]
+
+    cv2.imwrite(filepath, cropped)
+    return filepath
 
 
 def recognize_faces(image: np.ndarray, db: Session) -> dict:
@@ -47,18 +67,21 @@ def recognize_faces(image: np.ndarray, db: Session) -> dict:
             db.add(identity)
             db.flush()
 
-            new_embedding = FaceEmbedding(
-                identity_id=identity.id,
-                embedding=embedding.tolist(),
-            )
-            db.add(new_embedding)
-            db.flush()
-
             identity_id = identity.id
             confidence = 0.0
             status = "new_anonymous"
             name = None
             metadata = None
+
+        image_path = _save_cropped_face(image, bbox, identity_id)
+
+        face_embedding = FaceEmbedding(
+            identity_id=identity_id,
+            embedding=embedding.tolist(),
+            image_path=image_path,
+        )
+        db.add(face_embedding)
+        db.flush()
 
         identity_ids_in_process.append({
             "identity_id": identity_id,
@@ -96,6 +119,7 @@ def enroll_face(image: np.ndarray, name: str, metadata: Optional[dict], db: Sess
 
     primary_face = detected_faces[0]
     embedding = primary_face["embedding"]
+    bbox = primary_face["bbox"]
 
     identity = Identity(
         status="known",
@@ -105,9 +129,12 @@ def enroll_face(image: np.ndarray, name: str, metadata: Optional[dict], db: Sess
     db.add(identity)
     db.flush()
 
+    image_path = _save_cropped_face(image, bbox, identity.id)
+
     face_embedding = FaceEmbedding(
         identity_id=identity.id,
         embedding=embedding.tolist(),
+        image_path=image_path,
     )
     db.add(face_embedding)
     db.flush()

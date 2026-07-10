@@ -145,7 +145,23 @@ class TestFacesEndpoints:
         identity.status = "known"
         identity.name = "Ahmet Yılmaz"
         identity.extra_data = {"department": "R&D"}
-        mock_db.query.return_value.filter.return_value.first.return_value = identity
+
+        embedding = MagicMock()
+        embedding.image_path = "images/some-face.jpg"
+
+        def query_side_effect(model):
+            q = MagicMock()
+            f = MagicMock()
+            o = MagicMock()
+            q.filter.return_value = f
+            if model.__name__ == "FaceEmbedding":
+                f.order_by.return_value = o
+                o.first.return_value = embedding
+            else:
+                f.first.return_value = identity
+            return q
+
+        mock_db.query.side_effect = query_side_effect
 
         response = client.get(f"/faces/{MOCK_FACE_ID}")
         assert response.status_code == 200
@@ -153,6 +169,7 @@ class TestFacesEndpoints:
         assert data["faceId"] == str(MOCK_FACE_ID)
         assert data["status"] == "known"
         assert data["name"] == "Ahmet Yılmaz"
+        assert data["imagePath"] == "images/some-face.jpg"
 
     def test_get_face_detail_not_found(self, client, mock_db):
         mock_db.query.return_value.filter.return_value.first.return_value = None

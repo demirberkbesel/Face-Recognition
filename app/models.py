@@ -29,6 +29,7 @@ class FaceEmbedding(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     identity_id = Column(UUID(as_uuid=True), ForeignKey("identities.id", ondelete="CASCADE"), nullable=False)
     embedding = Column(Vector(512), nullable=False)
+    image_path = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     identity = relationship("Identity", back_populates="face_embeddings")

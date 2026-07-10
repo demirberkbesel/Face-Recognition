@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Identity, ProcessFace, Process
+from app.models import Identity, FaceEmbedding, ProcessFace, Process
 from app.schemas import (
     RecognizeResponse,
     EnrollResponse,
@@ -94,11 +94,19 @@ def get_face_detail(face_id: str, db: Session = Depends(get_db)):
     if not identity:
         raise HTTPException(status_code=404, detail="Face ID bulunamadı.")
 
+    latest_embedding = (
+        db.query(FaceEmbedding)
+        .filter(FaceEmbedding.identity_id == fid)
+        .order_by(FaceEmbedding.created_at.desc())
+        .first()
+    )
+
     return FaceDetailResponse(
         faceId=str(identity.id),
         status=identity.status,
         name=identity.name,
         metadata=identity.extra_data,
+        imagePath=latest_embedding.image_path if latest_embedding else None,
     )
 
 

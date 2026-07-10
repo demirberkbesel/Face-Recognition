@@ -50,6 +50,7 @@ class FaceDetailResponse(BaseModel):
     status: str
     name: Optional[str] = None
     metadata: Optional[dict] = None
+    imagePath: Optional[str] = None
 
 
 class DeleteResponse(BaseModel):

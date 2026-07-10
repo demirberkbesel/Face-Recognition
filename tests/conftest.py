@@ -29,6 +29,13 @@ def mock_session_local():
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def mock_save_cropped_face():
+    with patch("app.recognition._save_cropped_face") as mock:
+        mock.return_value = "images/mock-face.jpg"
+        yield mock
+
+
 @pytest.fixture
 def mock_db():
     db = MagicMock()
