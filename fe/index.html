@@ -1,0 +1,305 @@
+<!-- ============================================================
+  Face Recognition API – Web Arayüzü
+  Framework kullanmaz (sade HTML + CSS + JS).
+  Tüm stiller ve kod tek dosyada.
+============================================================ -->
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yüz Tanıma Sistemi</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f4f6f8;
+      color: #1a1a2e;
+      padding: 30px 20px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    p.sub { color: #666; margin-bottom: 24px; }
+
+    .upload-area {
+      background: #fff;
+      border: 2px dashed #ccc;
+      border-radius: 10px;
+      padding: 30px;
+      text-align: center;
+      margin-bottom: 24px;
+      transition: border-color 0.2s;
+    }
+    .upload-area.dragover { border-color: #4a6cf7; }
+    .upload-area input[type="file"] { display: block; margin: 0 auto 12px auto; }
+    .upload-area button {
+      background: #4a6cf7; color: #fff; border: none;
+      padding: 10px 28px; border-radius: 6px; font-size: 1rem;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .upload-area button:hover { background: #3b5de7; }
+    .upload-area button:disabled { background: #aaa; cursor: not-allowed; }
+
+    .spinner {
+      display: inline-block; width: 18px; height: 18px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .face-card {
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 16px;
+    }
+    .face-card img {
+      width: 100%; height: 180px;
+      object-fit: cover; border-radius: 6px; background: #eee;
+    }
+    .face-card .info { margin-top: 10px; }
+    .face-card .info p { margin: 4px 0; font-size: 0.9rem; }
+
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 0.8rem; font-weight: 600; color: #fff;
+    }
+    .badge-known { background: #2ecc71; }
+    .badge-anonymous { background: #f39c12; }
+    .badge-new_anonymous { background: #3498db; }
+
+    .enroll-form {
+      margin-top: 10px; display: flex; gap: 6px;
+    }
+    .enroll-form input {
+      flex: 1; padding: 6px 10px; border: 1px solid #ccc;
+      border-radius: 4px; font-size: 0.85rem;
+    }
+    .enroll-form button {
+      background: #2ecc71; color: #fff; border: none;
+      padding: 6px 14px; border-radius: 4px; font-size: 0.85rem;
+      cursor: pointer; white-space: nowrap;
+    }
+    .enroll-form button:hover { background: #27ae60; }
+    .enroll-form button:disabled { background: #aaa; cursor: not-allowed; }
+
+    .error {
+      background: #ffeaea; color: #c0392b;
+      border: 1px solid #e74c3c; border-radius: 6px;
+      padding: 12px 16px; margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Yüz Tanıma Sistemi</h1>
+  <p class="sub">
+    Bir fotoğraf seçin, "Tanı"ya basın.
+    Tanınan yüzler aşağıda listelenecek.
+    Anonim yüzleri kutuya isim yazarak kaydedebilirsiniz.
+  </p>
+
+  <div class="upload-area" id="dropZone">
+    <input type="file" id="fileInput" accept="image/*">
+    <br>
+    <button id="recognizeBtn">Tanı</button>
+  </div>
+
+  <div id="errorContainer"></div>
+  <div id="results"></div>
+
+  <script>
+    // Butona yüklenme animasyonu ekle/kaldır
+    function setLoading(btn, loading) {
+      btn.disabled = loading;
+      btn.innerHTML = loading
+        ? '<span class="spinner"></span> Tanınıyor…'
+        : 'Tanı';
+    }
+
+    // Hata göster (6sn sonra kaybolur)
+    function showError(msg) {
+      const c = document.getElementById('errorContainer');
+      c.innerHTML = '<div class="error"><strong>Hata:</strong> ' + msg + '</div>';
+      setTimeout(() => { c.innerHTML = ''; }, 6000);
+    }
+
+    // Durum → Türkçe etiket + CSS sınıfı
+    function statusLabel(status) {
+      const map = {
+        'known':         { tr: 'Tanınıyor',    cls: 'badge-known' },
+        'anonymous':     { tr: 'Anonim',       cls: 'badge-anonymous' },
+        'new_anonymous': { tr: 'Yeni Anonim',  cls: 'badge-new_anonymous' },
+      };
+      return map[status] || { tr: status, cls: '' };
+    }
+
+    // Bir yüzü isimlendir → POST /faces/enroll
+    async function enrollFace(faceId, name, cardEl) {
+      const btn = cardEl.querySelector('.enroll-form button');
+      btn.disabled = true;
+      btn.textContent = 'Kaydediliyor…';
+
+      try {
+        const fd = new FormData();
+        fd.append('face_id', faceId);
+        fd.append('name', name);
+
+        const resp = await fetch('/faces/enroll', { method: 'POST', body: fd });
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.detail || 'Enroll başarısız');
+        }
+
+        // Badge'i "known" yap
+        const badge = cardEl.querySelector('.badge');
+        badge.className = 'badge badge-known';
+        badge.textContent = 'Tanınıyor';
+
+        // İsim alanını güncelle
+        let nameP = cardEl.querySelector('.face-name');
+        if (!nameP) {
+          nameP = document.createElement('p');
+          nameP.className = 'face-name';
+          cardEl.querySelector('.info').prepend(nameP);
+        }
+        nameP.innerHTML = '<strong>İsim:</strong> ' + name;
+
+        // İsimlendirme formunu kaldır
+        cardEl.querySelector('.enroll-form').remove();
+
+      } catch (err) {
+        showError(err.message);
+        btn.disabled = false;
+        btn.textContent = 'İsimlendir';
+      }
+    }
+
+    // Tanıma sonucunu ekrana bas
+    function displayResults(data) {
+      const container = document.getElementById('results');
+      container.innerHTML = '';
+
+      if (data.faceCount === 0) {
+        container.innerHTML = '<p style="color:#888;">Hiç yüz bulunamadı.</p>';
+        return;
+      }
+
+      data.faces.forEach(face => {
+        const st = statusLabel(face.status);
+        const card = document.createElement('div');
+        card.className = 'face-card';
+
+        // Kırpılmış yüz resmi
+        const img = document.createElement('img');
+        img.src = '/faces/' + face.faceId + '/image';
+        img.alt = 'Yüz';
+        img.onerror = function() { this.alt = '(resim yok)'; this.style.display = 'none'; };
+        card.appendChild(img);
+
+        // Bilgi alanı
+        const info = document.createElement('div');
+        info.className = 'info';
+
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + st.cls;
+        badge.textContent = st.tr;
+        info.appendChild(badge);
+
+        if (face.name) {
+          const p = document.createElement('p');
+          p.className = 'face-name';
+          p.innerHTML = '<strong>İsim:</strong> ' + face.name;
+          info.appendChild(p);
+        }
+
+        const pct = (face.confidence * 100).toFixed(1);
+        const c = document.createElement('p');
+        c.innerHTML = '<strong>Güven:</strong> %' + pct;
+        info.appendChild(c);
+
+        card.appendChild(info);
+
+        // Anonim yüzlere isimlendirme formu
+        if (face.status === 'anonymous' || face.status === 'new_anonymous') {
+          const form = document.createElement('div');
+          form.className = 'enroll-form';
+
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.placeholder = 'Kişinin adı…';
+          form.appendChild(input);
+
+          const btn = document.createElement('button');
+          btn.textContent = 'İsimlendir';
+          btn.addEventListener('click', () => {
+            const name = input.value.trim();
+            if (!name) { showError('Lütfen bir isim girin.'); return; }
+            enrollFace(face.faceId, name, card);
+          });
+          form.appendChild(btn);
+
+          card.appendChild(form);
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    // Tanı butonu → POST /faces/recognize
+    document.getElementById('recognizeBtn').addEventListener('click', async () => {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+      if (!file) { showError('Lütfen bir dosya seçin.'); return; }
+
+      const btn = document.getElementById('recognizeBtn');
+      setLoading(btn, true);
+      document.getElementById('errorContainer').innerHTML = '';
+
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+
+        const resp = await fetch('/faces/recognize', { method: 'POST', body: fd });
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.detail || 'İstek başarısız (' + resp.status + ')');
+        }
+
+        const data = await resp.json();
+        displayResults(data);
+
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    // Sürükle-bırak
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        document.getElementById('fileInput').files = files;
+      }
+    });
+  </script>
+</body>
+</html>

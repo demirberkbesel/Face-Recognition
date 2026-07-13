@@ -1,9 +1,11 @@
 import uuid
+import os
 import json
 
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -101,12 +103,15 @@ def get_face_detail(face_id: str, db: Session = Depends(get_db)):
         .first()
     )
 
+    current_path = latest_embedding.image_path if latest_embedding else None
+    image_url = f"/faces/{face_id}/image" if current_path else None
+
     return FaceDetailResponse(
         faceId=str(identity.id),
         status=identity.status,
         name=identity.name,
         metadata=identity.extra_data,
-        imagePath=latest_embedding.image_path if latest_embedding else None,
+        imagePath=image_url,
     )
 
 
@@ -162,3 +167,25 @@ def get_face_history(face_id: str, db: Session = Depends(get_db)):
         )
 
     return FaceHistoryResponse(faceId=face_id, history=history)
+
+
+@router.get("/{face_id}/image")
+def get_face_image(face_id: str, db: Session = Depends(get_db)):
+    try:
+        fid = uuid.UUID(face_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Geçersiz faceId formatı.")
+
+    latest_embedding = (
+        db.query(FaceEmbedding)
+        .filter(FaceEmbedding.identity_id == fid)
+        .order_by(FaceEmbedding.created_at.desc())
+        .first()
+    )
+    if not latest_embedding or not latest_embedding.image_path:
+        raise HTTPException(status_code=404, detail="Bu yüz için kayıtlı resim bulunamadı.")
+
+    if not os.path.exists(latest_embedding.image_path):
+        raise HTTPException(status_code=404, detail="Resim dosyası diskte bulunamadı.")
+
+    return FileResponse(latest_embedding.image_path, media_type="image/jpeg")
