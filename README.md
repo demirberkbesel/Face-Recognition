@@ -67,6 +67,7 @@ Tüm ayarlar ortam değişkenleri (environment variables) ile yapılır. Proje k
 | `SIMILARITY_THRESHOLD` | `0.45` | Kosinüs mesafesi eşiğini belirler. Yüksek değer daha katı eşleşme (daha az hatalı pozitif), düşük değer daha toleranslı eşleşme (daha az hatalı negatif) demektir. |
 | `MIN_DETECTION_CONFIDENCE` | `0.5` | InsightFace yüz tespit güven skoru eşiği. Altındaki yüzler `qualityWarning` ile işaretlenir ve embedding'i kaydedilmez (yanlış eşleşmeyi önler). |
 | `BLUR_THRESHOLD` | `10.0` | Laplacian varyans bulanıklık eşiği. Altındaki görseller bulanık kabul edilip reddedilir. Düşük değer = daha toleranslı. |
+| `RATE_LIMIT` | `1000/minute` | `/faces/recognize` ve `/faces/enroll` için rate limit (format: sayı/birim). LFW testi için 1000/dk yeterli, üretimde düşürülür. |
 | `INSIGHTFACE_MODEL_NAME` | `buffalo_l` | InsightFace model seti adı |
 | `API_PORT` | `8000` | Host üzerinde API portu |
 

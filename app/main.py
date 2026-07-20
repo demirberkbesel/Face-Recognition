@@ -1,12 +1,10 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 
 from app.database import engine, Base
-from app.limiter import limiter
+from app.config import RATE_LIMIT
+from app.rate_limit import RateLimitMiddleware
 from app.routers import faces, processes
 
 app = FastAPI(
@@ -15,9 +13,28 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
+
+def _parse_rate_limit(value: str) -> tuple[int, int]:
+    """ '100/minute' veya '30/second' → (limit, window_seconds) """
+    part = value.strip()
+    if "/" in part:
+        num, unit = part.split("/", 1)
+        limit = int(num.strip())
+        unit = unit.strip().lower()
+        window = {"minute": 60, "second": 1, "hour": 3600}.get(unit, 60)
+    else:
+        limit = int(part)
+        window = 60
+    return limit, window
+
+
+_rate_limit, _rate_window = _parse_rate_limit(RATE_LIMIT)
+
+app.add_middleware(
+    RateLimitMiddleware,
+    limit=_rate_limit,
+    window=_rate_window,
+)
 
 
 @app.on_event("startup")

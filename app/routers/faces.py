@@ -4,12 +4,11 @@ import json
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form, Request
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.limiter import limiter
 from app.models import Identity, FaceEmbedding, ProcessFace, Process
 from app.schemas import (
     RecognizeResponse,
@@ -26,8 +25,7 @@ router = APIRouter(prefix="/faces", tags=["faces"])
 
 
 @router.post("/recognize", response_model=RecognizeResponse)
-@limiter.limit("10/minute")
-def recognize(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
+def recognize(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if file.content_type not in ("image/jpeg", "image/png", "image/jpg"):
         raise HTTPException(
             status_code=400,
@@ -51,9 +49,7 @@ def recognize(request: Request, file: UploadFile = File(...), db: Session = Depe
 
 
 @router.post("/enroll", response_model=EnrollResponse)
-@limiter.limit("10/minute")
 def enroll(
-    request: Request,
     file: UploadFile = File(None),
     name: str = Form(...),
     metadata: str = Form("null"),
