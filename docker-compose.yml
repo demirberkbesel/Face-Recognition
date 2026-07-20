@@ -57,6 +57,13 @@ services:
 
     # Kırpılmış yüz fotoğrafları container yeniden başlayınca kaybolmasın
     volumes:
+      # Geliştirme: kod değişiklikleri için rebuild gerektirmez
+      - ./app:/app/app
+      - ./fe:/app/fe
+      - ./tests:/app/tests
+      - ./requirements.txt:/app/requirements.txt
+      - ./download_models.py:/app/download_models.py
+      # Kalıcı veri: yüz fotoğrafları
       - images_data:/app/images
 
 volumes:

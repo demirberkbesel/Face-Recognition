@@ -10,3 +10,4 @@ onnxruntime==1.17.1
 numpy==1.26.4
 Pillow==10.3.0
 python-dotenv==1.0.1
+slowapi==0.1.9
