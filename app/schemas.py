@@ -19,6 +19,7 @@ class FaceResult(BaseModel):
     metadata: Optional[dict] = None
     boundingBox: BoundingBox
     confidence: float
+    qualityWarning: Optional[str] = None
 
 
 class RecognizeResponse(BaseModel):

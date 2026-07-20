@@ -1,6 +1,6 @@
 # Face Recognition API
 
-Gönderilen bir görseldeki tüm yüzleri tespit edip tanıyan, REST API olarak çalışan bir yüz tanıma servisidir. Kullanıcı arayüzü yoktur, yalnızca API üzerinden kullanılır.
+Gönderilen bir görseldeki tüm yüzleri tespit edip tanıyan, REST API olarak çalışan bir yüz tanıma servisidir. Basit bir web arayüzü `http://localhost:8000/` adresinde sunulur, isteğe bağlı olarak doğrudan API de kullanılabilir.
 
 ## Kullanılan Teknolojiler
 
@@ -40,6 +40,7 @@ docker compose up --build
 İlk çalıştırmada InsightFace model dosyaları (`~150MB`) indirilip imaja gömüldüğü için build birkaç dakika sürebilir. Sonraki çalıştırmalarda `--build` kullanmadan doğrudan `docker compose up` ile başlatabilirsiniz.
 
 API adresi: **http://localhost:8000**  
+Web arayüzü: **http://localhost:8000** (ana sayfa)  
 Swagger dokümantasyonu: **http://localhost:8000/docs**
 
 ### Durdurma
@@ -64,6 +65,8 @@ Tüm ayarlar ortam değişkenleri (environment variables) ile yapılır. Proje k
 | `POSTGRES_PORT` | `5433` | Host üzerinde PostgreSQL bağlantı portu (container içi 5432) |
 | `DATABASE_URL` | `postgresql://face_user:face_password@db:5432/face_db` | Veritabanı bağlantı dizesi (`postgresql://kullanici:sifre@host:port/db` formatında) |
 | `SIMILARITY_THRESHOLD` | `0.45` | Kosinüs mesafesi eşiğini belirler. Yüksek değer daha katı eşleşme (daha az hatalı pozitif), düşük değer daha toleranslı eşleşme (daha az hatalı negatif) demektir. |
+| `MIN_DETECTION_CONFIDENCE` | `0.5` | InsightFace yüz tespit güven skoru eşiği. Altındaki yüzler `qualityWarning` ile işaretlenir ve embedding'i kaydedilmez (yanlış eşleşmeyi önler). |
+| `BLUR_THRESHOLD` | `10.0` | Laplacian varyans bulanıklık eşiği. Altındaki görseller bulanık kabul edilip reddedilir. Düşük değer = daha toleranslı. |
 | `INSIGHTFACE_MODEL_NAME` | `buffalo_l` | InsightFace model seti adı |
 | `API_PORT` | `8000` | Host üzerinde API portu |
 
@@ -74,6 +77,7 @@ Tüm ayarlar ortam değişkenleri (environment variables) ile yapılır. Proje k
 | `POST` | `/faces/recognize` | Görseldeki tüm yüzleri tespit eder, tanır ve sonucu döner |
 | `POST` | `/faces/enroll` | Yeni bir yüz kaydeder veya anonim bir yüzü isimlendirir |
 | `GET` | `/faces/{face_id}` | Bir yüz kimliğinin detaylarını döner |
+| `GET` | `/faces/{face_id}/image` | Kırpılmış yüz resmini `image/jpeg` olarak döndürür |
 | `DELETE` | `/faces/{face_id}` | Bir yüz kimliğini ve bağlı tüm verileri siler |
 | `GET` | `/faces/{face_id}/history` | Bir yüzün geçmişte hangi işlemlerde göründüğünü döner |
 | `GET` | `/processes/{process_id}` | Bir işlemin detaylarını ve o işlemde tespit edilen yüzleri döner |
@@ -91,26 +95,23 @@ curl -X POST http://localhost:8000/faces/recognize \
   -F "file=@kisi.jpg"
 ```
 
-**Başarılı yanıt (yüz bulundu):**
+**Başarılı yanıt (yeni anonim yüz):**
 ```json
 {
-  "processId": "c9a6331a-6dfa-4be7-805c-3f98016fbe85",
-  "faceCount": 2,
+  "processId": "5acdb121-6743-4f35-abee-5ce756fe71f6",
+  "faceCount": 1,
   "faces": [
     {
-      "faceId": "8f309a9d-b8d2-4fe1-ba54-208b0a17409f",
-      "status": "known",
-      "name": "Ahmet Yılmaz",
-      "metadata": {"title": "Mühendis"},
-      "boundingBox": {"xmin": 120, "ymin": 80, "xmax": 240, "ymax": 210},
-      "confidence": 0.89
-    },
-    {
-      "faceId": "47cb324c-1e24-4f9e-bd9d-bc11d290b0e5",
+      "faceId": "04e57368-bbdd-4f91-be5b-9b50b9dd5e30",
       "status": "new_anonymous",
       "name": null,
       "metadata": null,
-      "boundingBox": {"xmin": 450, "ymin": 95, "xmax": 560, "ymax": 220},
+      "boundingBox": {
+        "xmin": 69,
+        "ymin": 60,
+        "xmax": 170,
+        "ymax": 195
+      },
       "confidence": 0.0
     }
   ]
@@ -120,7 +121,7 @@ curl -X POST http://localhost:8000/faces/recognize \
 **Başarılı yanıt (yüz bulunamadı):**
 ```json
 {
-  "processId": "c9a6331a-6dfa-4be7-805c-3f98016fbe85",
+  "processId": "5acdb121-6743-4f35-abee-5ce756fe71f6",
   "faceCount": 0,
   "faces": []
 }
@@ -150,10 +151,10 @@ curl -X POST http://localhost:8000/faces/enroll \
 **Başarılı yanıt:**
 ```json
 {
-  "faceId": "47cb324c-1e24-4f9e-bd9d-bc11d290b0e5",
+  "faceId": "04e57368-bbdd-4f91-be5b-9b50b9dd5e30",
   "status": "known",
-  "name": "Mehmet Demir",
-  "metadata": {"role": "Tasarımcı"}
+  "name": "Abdullah Gul",
+  "metadata": null
 }
 ```
 
@@ -177,16 +178,16 @@ curl -X POST http://localhost:8000/faces/enroll \
 Bir yüz kimliğinin detaylarını döner. Yanıtta o kişiye ait en son kırpılmış yüz fotoğrafının yolu da (`imagePath`) yer alır.
 
 ```bash
-curl http://localhost:8000/faces/8f309a9d-b8d2-4fe1-ba54-208b0a17409f
+curl http://localhost:8000/faces/04e57368-bbdd-4f91-be5b-9b50b9dd5e30
 ```
 
 ```json
 {
-  "faceId": "8f309a9d-b8d2-4fe1-ba54-208b0a17409f",
+  "faceId": "04e57368-bbdd-4f91-be5b-9b50b9dd5e30",
   "status": "known",
-  "name": "Ahmet Yılmaz",
-  "metadata": {"title": "Mühendis"},
-  "imagePath": "images/8f309a9d-b8d2-4fe1-ba54-208b0a17409f/a1b2c3d4.jpg"
+  "name": "Abdullah Gul",
+  "metadata": null,
+  "imagePath": "/faces/04e57368-bbdd-4f91-be5b-9b50b9dd5e30/image"
 }
 ```
 
@@ -195,13 +196,13 @@ curl http://localhost:8000/faces/8f309a9d-b8d2-4fe1-ba54-208b0a17409f
 Bir yüz kimliğini ve ona bağlı tüm embedding vektörlerini, geçmiş kayıtlarını ve kırpılmış fotoğraflarını siler.
 
 ```bash
-curl -X DELETE http://localhost:8000/faces/8f309a9d-b8d2-4fe1-ba54-208b0a17409f
+curl -X DELETE http://localhost:8000/faces/04e57368-bbdd-4f91-be5b-9b50b9dd5e30
 ```
 
 ```json
 {
   "message": "Face ID ve bağlı vektörler başarıyla silindi.",
-  "faceId": "8f309a9d-b8d2-4fe1-ba54-208b0a17409f"
+  "faceId": "04e57368-bbdd-4f91-be5b-9b50b9dd5e30"
 }
 ```
 
@@ -210,7 +211,33 @@ curl -X DELETE http://localhost:8000/faces/8f309a9d-b8d2-4fe1-ba54-208b0a17409f
 Bir yüz kimliğinin geçmiş işlem kayıtlarını döner.
 
 ```bash
-curl http://localhost:8000/faces/47cb324c-1e24-4f9e-bd9d-bc11d290b0e5/history
+curl http://localhost:8000/faces/04e57368-bbdd-4f91-be5b-9b50b9dd5e30/history
+```
+
+```json
+{
+  "faceId": "04e57368-bbdd-4f91-be5b-9b50b9dd5e30",
+  "history": [
+    {
+      "processId": "88f21775-25fc-4a42-a825-c65e7e428d3b",
+      "timestamp": "2026-07-13T12:13:30.251490",
+      "status": "known",
+      "confidence": 0.64,
+      "boundingBox": {
+        "xmin": 74, "ymin": 66, "xmax": 174, "ymax": 191
+      }
+    },
+    {
+      "processId": "5acdb121-6743-4f35-abee-5ce756fe71f6",
+      "timestamp": "2026-07-13T12:13:28.817992",
+      "status": "new_anonymous",
+      "confidence": 0.0,
+      "boundingBox": {
+        "xmin": 69, "ymin": 60, "xmax": 170, "ymax": 195
+      }
+    }
+  ]
+}
 ```
 
 ### GET /processes/{process_id}
@@ -218,7 +245,28 @@ curl http://localhost:8000/faces/47cb324c-1e24-4f9e-bd9d-bc11d290b0e5/history
 Tek bir işlemin detaylarını ve o işlemde tespit edilen yüzleri döner.
 
 ```bash
-curl http://localhost:8000/processes/c9a6331a-6dfa-4be7-805c-3f98016fbe85
+curl http://localhost:8000/processes/5acdb121-6743-4f35-abee-5ce756fe71f6
+```
+
+```json
+{
+  "processId": "5acdb121-6743-4f35-abee-5ce756fe71f6",
+  "timestamp": "2026-07-13T12:13:28.817992",
+  "taskDetails": {
+    "type": "recognition",
+    "faceCount": 1
+  },
+  "faces": [
+    {
+      "faceId": "04e57368-bbdd-4f91-be5b-9b50b9dd5e30",
+      "status": "new_anonymous",
+      "confidence": 0.0,
+      "boundingBox": {
+        "xmin": 69, "ymin": 60, "xmax": 170, "ymax": 195
+      }
+    }
+  ]
+}
 ```
 
 ## Kimlik Durumları (Status)
@@ -235,7 +283,9 @@ Her yüz bir `status` değerine sahiptir:
 
 ## Fotoğraf Saklama
 
-Her `/faces/recognize` çağrısında, tespit edilen her yüz, InsightFace'in verdiği `boundingBox` koordinatları kullanılarak orijinal görselden kırpılır ve `/app/images/{identity_id}/{uuid}.jpg` yoluna kaydedilir. Bu dosyalar Docker volume'u (`images_data`) üzerinde saklandığı için container yeniden başlatıldığında kaybolmaz. Dosya yolu, `face_embeddings` tablosundaki `image_path` sütununda tutulur ve `GET /faces/{face_id}` endpoint'i ile sorgulanabilir.
+Her `/faces/recognize` çağrısında, tespit edilen her yüz, InsightFace'in verdiği `boundingBox` koordinatları kullanılarak orijinal görselden kırpılır ve `/app/images/{identity_id}/{uuid}.jpg` yoluna kaydedilir. Bu dosyalar Docker volume'u (`images_data`) üzerinde saklandığı için container yeniden başlatıldığında kaybolmaz. Dosya yolu, `face_embeddings` tablosundaki `image_path` sütununda tutulur.
+
+**Kırpılmış resme erişim:** `GET /faces/{face_id}/image` endpoint'i doğrudan `image/jpeg` olarak resmi döndürür. `GET /faces/{face_id}` cevabındaki `imagePath` alanı da bu URL'i (`/faces/{face_id}/image`) gösterir.
 
 ## Testler
 
@@ -328,6 +378,8 @@ face-recognition-api/
 │   ├── test_routers.py      # API testleri (14 test)
 │   └── e2e/
 │       └── test_lfw_accuracy.py  # LFW ile doğruluk testi
+├── fe/
+│   └── index.html           # Web arayüzü (HTML+CSS+JS, / adresinde sunulur)
 ├── Dockerfile               # python:3.12-slim tabanlı, model imaja gömülü
 ├── docker-compose.yml       # PostgreSQL + pgvector + API
 ├── .dockerignore

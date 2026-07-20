@@ -169,7 +169,7 @@ class TestFacesEndpoints:
         assert data["faceId"] == str(MOCK_FACE_ID)
         assert data["status"] == "known"
         assert data["name"] == "Ahmet Yılmaz"
-        assert data["imagePath"] == "images/some-face.jpg"
+        assert data["imagePath"] == f"/faces/{MOCK_FACE_ID}/image"
 
     def test_get_face_detail_not_found(self, client, mock_db):
         mock_db.query.return_value.filter.return_value.first.return_value = None

@@ -36,6 +36,14 @@ def mock_save_cropped_face():
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def mock_blur_check():
+    """Varsayılan: blur kontrolünü devre dışı bırak (mevcut testler bozulmasın)."""
+    with patch("app.recognition.check_blur") as mock:
+        mock.return_value = (False, 999.0)
+        yield mock
+
+
 @pytest.fixture
 def mock_db():
     db = MagicMock()

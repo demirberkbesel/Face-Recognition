@@ -41,7 +41,10 @@ def recognize(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if image is None:
         raise HTTPException(status_code=400, detail="Görsel okunamadı veya bozuk.")
 
-    result = recognize_faces(image, db)
+    try:
+        result = recognize_faces(image, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return result
 
 

@@ -9,10 +9,11 @@ import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.config import SIMILARITY_THRESHOLD
+from app.config import SIMILARITY_THRESHOLD, MIN_DETECTION_CONFIDENCE, BLUR_THRESHOLD
 from app.database import SessionLocal
 from app.models import Identity, FaceEmbedding, Process, ProcessFace
 from app.face_engine import FaceEngine
+from app.quality import check_blur
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,14 @@ def _save_cropped_face(image: np.ndarray, bbox: dict, identity_id: uuid.UUID) ->
 
 
 def recognize_faces(image: np.ndarray, db: Session) -> dict:
+    # Görüntü kalite kontrolü: bulanıklık
+    is_blurry, blur_score = check_blur(image, BLUR_THRESHOLD)
+    if is_blurry:
+        raise ValueError(
+            f"Fotoğraf çok bulanık (skor: {blur_score:.1f}, eşik: {BLUR_THRESHOLD}). "
+            "Lütfen daha net bir fotoğraf yükleyin."
+        )
+
     process_id = uuid.uuid4()
 
     detected_faces = engine.detect_faces(image)
@@ -47,6 +56,11 @@ def recognize_faces(image: np.ndarray, db: Session) -> dict:
     for det in detected_faces:
         embedding = det["embedding"]
         bbox = det["bbox"]
+        det_score = det["det_score"]
+
+        qual_warning = None
+        if det_score < MIN_DETECTION_CONFIDENCE:
+            qual_warning = f"Düşük kaliteli yüz tespiti (skor: {det_score:.2f})"
 
         matched_identity = _find_nearest_match(embedding, db)
 
@@ -73,15 +87,18 @@ def recognize_faces(image: np.ndarray, db: Session) -> dict:
             name = None
             metadata = None
 
-        image_path = _save_cropped_face(image, bbox, identity_id)
-
-        face_embedding = FaceEmbedding(
-            identity_id=identity_id,
-            embedding=embedding.tolist(),
-            image_path=image_path,
-        )
-        db.add(face_embedding)
-        db.flush()
+        # Düşük kaliteli yüzlerde embedding kaydetme (yanlış eşleşmeyi önle)
+        if qual_warning:
+            image_path = None
+        else:
+            image_path = _save_cropped_face(image, bbox, identity_id)
+            face_embedding = FaceEmbedding(
+                identity_id=identity_id,
+                embedding=embedding.tolist(),
+                image_path=image_path,
+            )
+            db.add(face_embedding)
+            db.flush()
 
         identity_ids_in_process.append({
             "identity_id": identity_id,
@@ -99,6 +116,7 @@ def recognize_faces(image: np.ndarray, db: Session) -> dict:
             "metadata": metadata,
             "boundingBox": bbox,
             "confidence": confidence,
+            "qualityWarning": qual_warning,
         })
 
     db.commit()
@@ -113,6 +131,13 @@ def recognize_faces(image: np.ndarray, db: Session) -> dict:
 
 
 def enroll_face(image: np.ndarray, name: str, metadata: Optional[dict], db: Session) -> dict:
+    is_blurry, blur_score = check_blur(image, BLUR_THRESHOLD)
+    if is_blurry:
+        raise ValueError(
+            f"Fotoğraf çok bulanık (skor: {blur_score:.1f}, eşik: {BLUR_THRESHOLD}). "
+            "Lütfen daha net bir fotoğraf yükleyin."
+        )
+
     detected_faces = engine.detect_faces(image)
     if not detected_faces:
         raise ValueError("Görselde yüz bulunamadı.")
