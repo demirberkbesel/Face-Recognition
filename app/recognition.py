@@ -23,17 +23,23 @@ engine = FaceEngine()
 IMAGES_DIR = "images"
 
 
-def _save_cropped_face(image: np.ndarray, bbox: dict, identity_id: uuid.UUID) -> str:
+def _save_cropped_face(image: np.ndarray, bbox: dict, identity_id: uuid.UUID, margin: float = 0.2) -> str:
     identity_dir = os.path.join(IMAGES_DIR, str(identity_id))
     os.makedirs(identity_dir, exist_ok=True)
 
     filename = f"{uuid.uuid4()}.jpg"
     filepath = os.path.join(identity_dir, filename)
 
-    ymin, ymax = max(0, bbox["ymin"]), bbox["ymax"]
-    xmin, xmax = max(0, bbox["xmin"]), bbox["xmax"]
-    cropped = image[ymin:ymax, xmin:xmax]
+    h, w = image.shape[:2]
+    face_w = bbox["xmax"] - bbox["xmin"]
+    face_h = bbox["ymax"] - bbox["ymin"]
 
+    xmin = max(0, int(bbox["xmin"] - face_w * margin))
+    ymin = max(0, int(bbox["ymin"] - face_h * margin))
+    xmax = min(w, int(bbox["xmax"] + face_w * margin))
+    ymax = min(h, int(bbox["ymax"] + face_h * margin))
+
+    cropped = image[ymin:ymax, xmin:xmax]
     cv2.imwrite(filepath, cropped)
     return filepath
 
